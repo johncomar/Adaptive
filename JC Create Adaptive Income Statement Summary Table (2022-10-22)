@@ -1,0 +1,99 @@
+DROP TABLE IF EXISTS scratch.john_comar_adaptive_income_statement;
+
+CREATE TABLE scratch.john_comar_adaptive_income_statement AS
+
+WITH
+  staging_fields_01 AS (
+    SELECT Level, Accounts, Account_Attributes, Merchant_Type, Product, Region, Date FROM scratch.john_comar_adaptive_income_statement_current_year
+    UNION ALL
+    SELECT Level, Accounts, Account_Attributes, Merchant_Type, Product, Region, Date FROM scratch.john_comar_adaptive_income_statement_prior_year
+    UNION ALL
+    SELECT Level, Accounts, Account_Attributes, Merchant_Type, Product, Region, Date FROM scratch.john_comar_adaptive_income_statement_q4f
+    UNION ALL
+    SELECT Level, Accounts, Account_Attributes, Merchant_Type, Product, Region, Date FROM scratch.john_comar_adaptive_income_statement_investment_plan
+    ),
+  
+  staging_fields_02 AS (
+    SELECT DISTINCT * FROM staging_fields_01
+  )
+
+SELECT
+  fields.Level,
+  levels.Level_1,
+  levels.Level_2,
+  
+  CASE WHEN SAFE_CAST(LEFT(fields.Accounts, 5) AS NUMERIC) IS NULL THEN fields.Accounts ELSE LEFT(fields.Accounts, 5) END AS Account,
+  mapping.Account_Description,
+  mapping.Account_and_Description,
+  mapping.Account_Level_1,
+  mapping.Account_Level_2,
+  mapping.Account_Level_3,
+  mapping.Account_Level_4,
+  mapping.Account_Level_5,
+  mapping.Include_in_AOI,
+  
+  fields.Account_Attributes,
+  fields.Merchant_Type,
+
+  fields.Product,
+  products.Product_Level_1,
+
+  fields.Region,
+  regions.Region_Level_1,
+  regions.Region_Level_2,
+
+  fields.Date,
+  COALESCE(cy.Value, 0) AS Current_Year,
+  COALESCE(py.Value, 0) AS Prior_Year,
+  COALESCE(q4f.Value, 0) AS q4f,
+  COALESCE(plan.Value, 0) AS Investment_Plan
+  
+FROM staging_fields_02 AS fields
+
+LEFT JOIN scratch.john_comar_adaptive_mapping_is_levels AS levels ON fields.Level = levels.Level_Base
+LEFT JOIN scratch.john_comar_adaptive_mapping_is_accounts AS mapping ON CASE WHEN SAFE_CAST(LEFT(fields.Accounts, 5) AS NUMERIC) IS NULL THEN fields.Accounts ELSE LEFT(fields.Accounts, 5) END = mapping.Account
+LEFT JOIN scratch.john_comar_adaptive_mapping_is_products AS products ON fields.Product = products.Product
+LEFT JOIN scratch.john_comar_adaptive_mapping_is_region AS regions ON fields.Region = regions.Region
+
+LEFT JOIN scratch.john_comar_adaptive_income_statement_current_year AS cy
+  ON  fields.Level = cy.Level
+  AND fields.Accounts = cy.Accounts
+  AND fields.Date = cy.Date
+  AND fields.Account_Attributes = cy.Account_Attributes
+  AND fields.Merchant_Type = cy.Merchant_Type
+  AND fields.Product = cy.Product
+  AND fields.Region = cy.Region
+
+LEFT JOIN scratch.john_comar_adaptive_income_statement_prior_year AS py
+  ON  fields.Level = py.Level
+  AND fields.Accounts = py.Accounts
+  AND fields.Date = py.Date
+  AND fields.Account_Attributes = py.Account_Attributes
+  AND fields.Merchant_Type = py.Merchant_Type
+  AND fields.Product = py.Product
+  AND fields.Region = py.Region
+
+LEFT JOIN scratch.john_comar_adaptive_income_statement_q4f AS q4f
+  ON  fields.Level = q4f.Level
+  AND fields.Accounts = q4f.Accounts
+  AND fields.Date = q4f.Date
+  AND fields.Account_Attributes = q4f.Account_Attributes
+  AND fields.Merchant_Type = q4f.Merchant_Type
+  AND fields.Product = q4f.Product
+  AND fields.Region = q4f.Region
+
+LEFT JOIN scratch.john_comar_adaptive_income_statement_investment_plan AS plan
+  ON  fields.Level = plan.Level
+  AND fields.Accounts = plan.Accounts
+  AND fields.Date = plan.Date
+  AND fields.Account_Attributes = plan.Account_Attributes
+  AND fields.Merchant_Type = plan.Merchant_Type
+  AND fields.Product = plan.Product
+  AND fields.Region = plan.Region
+
+WHERE TRUE
+  AND fields.date <= DATE('2022-06-30') -- Limiting results to Q2-22 and earlier
+
+;
+
+SELECT * FROM scratch.john_comar_adaptive_income_statement
